@@ -25,7 +25,9 @@ async function getNaverToken() {
     body: params
   });
   const data = await res.json();
-  if (!res.ok) throw new Error('토큰 발급 실패');
+  if (!res.ok) {
+    throw new Error(JSON.stringify(data));
+  }
   return data.access_token;
 }
 
