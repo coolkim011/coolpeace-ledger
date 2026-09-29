@@ -1,4 +1,6 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 
 const CLIENT_ID = '4VzAP3FHmhTfW5uzwjYI2T';
@@ -27,16 +29,12 @@ async function getNaverToken() {
   return data.access_token;
 }
 
-// 해당 월의 실제 통장 입금(정산) 내역 전체 조회
 async function fetchOrdersForMonth(token, year, month) {
   const padM = String(month).padStart(2, '0');
   const lastDay = new Date(year, month, 0).getDate();
   const startDate = `${year}-${padM}-01`;
   const endDate = `${year}-${padM}-${String(lastDay).padStart(2, '0')}`;
 
-  console.log(`\n▶ [${year}년 ${padM}월] 실제 정산 입금 내역 조회 (${startDate} ~ ${endDate})...`);
-
-  // 네이버 일별 정산 API (실제 통장 입금 기준)
   const dailyUrl = `https://api.commerce.naver.com/external/v1/pay-settle/settle/daily?startDate=${startDate}&endDate=${endDate}&size=1000`;
 
   let items = [];
@@ -45,24 +43,22 @@ async function fetchOrdersForMonth(token, year, month) {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
     });
     const data = await res.json();
-    
     if (data && data.elements && Array.isArray(data.elements)) {
-      console.log(`✔ 네이버 응답 수신: 총 ${data.elements.length}건의 정산 입금 데이터 확인!`);
       items = data.elements;
-      if (items.length > 0) {
-        console.log('--- 실제 정산 데이터 샘플 ---');
-        console.log(items[0]);
-        console.log('---------------------------');
-      }
-    } else {
-      console.log('응답 내용:', data);
     }
   } catch (err) {
     console.error('조회 오류:', err.message);
   }
-
   return items;
 }
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png'
+};
 
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -76,7 +72,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
-  
+
+  // 네이버 동기화 API
   if (reqUrl.pathname === '/api/naver-orders-month') {
     const year = parseInt(reqUrl.searchParams.get('year') || '2026', 10);
     const month = parseInt(reqUrl.searchParams.get('month') || '9', 10);
@@ -84,21 +81,32 @@ const server = http.createServer(async (req, res) => {
     try {
       const token = await getNaverToken();
       const orders = await fetchOrdersForMonth(token, year, month);
-
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ elements: orders }));
     } catch (err) {
-      console.error('에러:', err);
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: err.message }));
     }
-  } else {
-    res.writeHead(404);
-    res.end();
+    return;
   }
+
+  // 웹 화면(index.html, sw.js, manifest.json) 서빙
+  let filePath = reqUrl.pathname === '/' ? '/index.html' : reqUrl.pathname;
+  const fullPath = path.join(__dirname, filePath);
+  const ext = path.extname(fullPath).toLowerCase();
+
+  fs.readFile(fullPath, (err, content) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('404 Not Found');
+    } else {
+      res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+      res.end(content);
+    }
+  });
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`✔ 통장 입금 정산 서버 실행 중: http://localhost:${PORT}`);
+  console.log(`✔ 통합 서버 가동 완료 (포트: ${PORT})`);
 });
