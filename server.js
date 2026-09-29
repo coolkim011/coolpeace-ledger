@@ -75,7 +75,21 @@ const server = http.createServer(async (req, res) => {
 
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
 
-  // 네이버 동기화 API
+  // 1. 서버 IP 확인용 주소
+  if (reqUrl.pathname === '/api/check-ip') {
+    try {
+      const ipRes = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipRes.json();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(ipData));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // 2. 네이버 동기화 API
   if (reqUrl.pathname === '/api/naver-orders-month') {
     const year = parseInt(reqUrl.searchParams.get('year') || '2026', 10);
     const month = parseInt(reqUrl.searchParams.get('month') || '9', 10);
@@ -92,7 +106,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 웹 화면(index.html, sw.js, manifest.json) 서빙
+  // 3. 웹 화면 서빙
   let filePath = reqUrl.pathname === '/' ? '/index.html' : reqUrl.pathname;
   const fullPath = path.join(__dirname, filePath);
   const ext = path.extname(fullPath).toLowerCase();
