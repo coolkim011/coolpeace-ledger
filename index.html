@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#192a56">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3135/3135706.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>쿨피스케어 매출·세무 장부</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; }
+    body { background-color: #e9ecef; display: flex; justify-content: center; padding: 20px; }
+    .phone-container { width: 100%; max-width: 440px; background: #f4f6f8; border-radius: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); overflow: hidden; min-height: 850px; display: flex; flex-direction: column; position: relative; }
+    .header { background: #fff; padding: 18px 20px; font-size: 18px; font-weight: bold; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+    
+    .main-nav { display: flex; background: #fff; border-bottom: 1px solid #dfe4ea; }
+    .main-tab { flex: 1; padding: 12px; text-align: center; font-size: 14px; font-weight: bold; color: #718093; cursor: pointer; border-bottom: 3px solid transparent; }
+    .main-tab.active { color: #0984e3; border-bottom: 3px solid #0984e3; }
+
+    .content { padding: 16px; flex: 1; overflow-y: auto; }
+    
+    .login-box { background: #fff; border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 16px; border: 1px solid #dfe4ea; }
+    .login-btn { background: #192a56; color: #fff; border: none; padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; }
+
+    .month-nav { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 10px 16px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #e1e8ed; }
+    .nav-btn { background: #f1f2f6; border: none; padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; color: #2f3542; }
+    .nav-title { font-size: 16px; font-weight: bold; color: #2f3542; }
+
+    .compare-selector-box { background: #fff; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; border: 1px solid #dfe4ea; }
+    .selector-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .select-label { font-size: 11px; color: #718093; font-weight: bold; margin-bottom: 4px; }
+    .custom-select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; font-weight: bold; color: #2f3542; background: #f8fafc; }
+
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .btn-action { border: none; padding: 10px 12px; border-radius: 10px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px; }
+    .btn-export { background: #27ae60; color: #fff; box-shadow: 0 2px 6px rgba(39, 174, 96, 0.2); }
+    .btn-naver { background: #03c75a; color: #fff; box-shadow: 0 2px 6px rgba(3, 199, 90, 0.2); }
+    .btn-naver:disabled { background: #a4b0be; cursor: not-allowed; }
+
+    .summary-card { background: #192a56; color: #fff; border-radius: 18px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(25, 42, 86, 0.2); }
+    .summary-title { font-size: 13px; color: #a4b0be; }
+    .summary-amount { font-size: 26px; font-weight: bold; margin: 4px 0 16px 0; color: #4cd137; }
+    .summary-divider { height: 1px; background: rgba(255,255,255,0.15); margin-bottom: 14px; }
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-label { font-size: 11px; margin-bottom: 2px; }
+    .grid-val { font-size: 15px; font-weight: bold; }
+    .rev-val { color: #54a0ff; }
+    .exp-val { color: #ff6b6b; }
+    .vat-val { color: #fbc531; }
+
+    .filter-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab-btn { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #dcdde1; background: #fff; font-size: 13px; font-weight: bold; cursor: pointer; color: #718093; text-align: center; }
+    .tab-btn.active { background: #2f3542; color: #fff; border-color: #2f3542; }
+
+    .list-title { font-size: 14px; font-weight: bold; color: #718093; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .item-card { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; border: 1px solid #e1e8ed; transition: transform 0.1s, box-shadow 0.1s; }
+    .item-card:active { transform: scale(0.98); background: #f8fafc; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .card-date { font-size: 12px; color: #a4b0be; }
+    .badge { font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 6px; }
+    .badge-cash { background: #e8f5e9; color: #2e7d32; }
+    .badge-card { background: #e3f2fd; color: #1565c0; }
+    .badge-tax { background: #f3e5f5; color: #7b1fa2; }
+    .badge-expense { background: #ffebee; color: #c62828; }
+    .badge-naver { background: #e8f8f0; color: #03c75a; }
+    .card-title { font-size: 15px; font-weight: bold; color: #2f3542; margin-bottom: 4px; }
+    .card-bottom { display: flex; justify-content: space-between; align-items: center; }
+    .card-target { font-size: 12px; color: #57606f; }
+    .card-price { font-size: 15px; font-weight: bold; }
+    .price-rev { color: #0984e3; }
+    .price-exp { color: #d63031; }
+    .card-sub { font-size: 11px; color: #8395a7; margin-top: 4px; }
+
+    .compare-card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; border: 1px solid #dfe4ea; }
+    .compare-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .growth-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    .growth-up { background: #e8f5e9; color: #2e7d32; }
+    .growth-down { background: #ffebee; color: #c62828; }
+    .chart-container { position: relative; height: 260px; width: 100%; margin-top: 10px; }
+
+    /* 바텀시트 모달 스타일 */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: flex-end; justify-content: center; z-index: 9999; }
+    .modal-content { background: #fff; width: 100%; max-width: 440px; border-radius: 20px 20px 0 0; padding: 24px; animation: slideUp 0.25s ease-out; box-sizing: border-box; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-bar { width: 40px; height: 4px; background: #dfe4ea; border-radius: 2px; margin: 0 auto 16px auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .modal-name { font-size: 18px; font-weight: bold; color: #2f3542; }
+    .modal-price { font-size: 18px; font-weight: bold; }
+    .modal-row { margin: 14px 0; }
+    .modal-label { font-size: 12px; color: #718093; margin-bottom: 3px; font-weight: bold; }
+    .modal-val { font-size: 14px; font-weight: 500; color: #2f3542; word-break: break-all; }
+    .btn-group { display: flex; gap: 8px; margin-top: 6px; }
+    .btn { padding: 8px 14px; border-radius: 8px; border: none; font-size: 13px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+    .btn-phone { background: #e3f2fd; color: #0984e3; }
+    .btn-close { width: 100%; padding: 12px; border-radius: 10px; background: #2f3542; color: #fff; font-size: 15px; margin-top: 16px; border: none; cursor: pointer; font-weight: bold; }
+    .loading-spinner { text-align: center; padding: 30px; font-size: 14px; color: #718093; }
+  </style>
+</head>
+<body>
+
+<div class="phone-container">
+  <div class="header">
+    <span>쿨피스케어 매출·세무</span>
+    <span id="syncStatus" style="font-size: 12px; color: #718093;">미연결</span>
+  </div>
+
+  <div class="main-nav">
+    <div class="main-tab active" id="tabMonthly" onclick="switchView('MONTHLY')">월간 장부</div>
+    <div class="main-tab" id="tabAnalytics" onclick="switchView('ANALYTICS')">연간·월별 비교</div>
+  </div>
+
+  <div class="content">
+    <div class="login-box" id="loginBox">
+      <div style="font-size: 14px; font-weight: bold; color: #2f3542;">구글 캘린더 동기화</div>
+      <div style="font-size: 12px; color: #718093; margin-top: 4px;">캘린더의 매출과 지출을 분석합니다.</div>
+      <button class="login-btn" onclick="requestCalendarAuth()">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#fff" d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+        구글 캘린더 연동하기
+      </button>
+    </div>
+
+    <!-- 1. 월간 장부 뷰 -->
+    <div id="monthlyView">
+      <div class="month-nav">
+        <button class="nav-btn" onclick="changeMonth(-1)">◀ 이전달</button>
+        <div class="nav-title" id="currentMonthLabel">2026년 9월</div>
+        <button class="nav-btn" onclick="changeMonth(1)">다음달 ▶</button>
+      </div>
+
+      <div class="action-grid">
+        <button class="btn-action btn-export" onclick="exportTaxReport()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          세무 엑셀(CSV)
+        </button>
+        <button class="btn-action btn-naver" id="btnSyncNaver" onclick="syncCurrentMonthNaver()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M16.273 12.845L7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z"/></svg>
+          <span id="btnSyncText">9월 스마트스토어 동기화</span>
+        </button>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-title">선택 월 순이익 (매출공급가 - 지출공급가)</div>
+        <div class="summary-amount" id="netProfit">0원</div>
+        <div class="summary-divider"></div>
+        <div class="summary-grid">
+          <div>
+            <div class="grid-label" style="color: #a4b0be;">총 매출액</div>
+            <div class="grid-val rev-val" id="totalRev">0원</div>
+          </div>
+          <div>
+            <div class="grid-label" style="color: #a4b0be;">총 지출액 (경비)</div>
+            <div class="grid-val exp-val" id="totalExp">0원</div>
+          </div>
+          <div>
+            <div class="grid-label" style="color: #a4b0be;">매출 부가세</div>
+            <div class="grid-val" id="revVat" style="color: #fff;">0원</div>
+          </div>
+          <div>
+            <div class="grid-label" style="color: #fbc531;">납부예정 부가세(최종)</div>
+            <div class="grid-val vat-val" id="netVat">0원</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-tabs">
+        <button class="tab-btn active" onclick="setFilter('ALL', this)">전체</button>
+        <button class="tab-btn" onclick="setFilter('REV', this)">매출만</button>
+        <button class="tab-btn" onclick="setFilter('EXP', this)">지출만</button>
+      </div>
+
+      <div class="list-title">
+        <span>작업 및 결제 내역</span>
+        <span id="recordCount" style="font-weight: normal; font-size: 12px;">0건</span>
+      </div>
+      
+      <div id="loading" class="loading-spinner" style="display: none;">데이터를 동기화 중입니다...</div>
+      <div id="salesList"></div>
+    </div>
+
+    <!-- 2. 연간·월별 비교 뷰 -->
+    <div id="analyticsView" style="display: none;">
+      
+      <div class="compare-selector-box">
+        <div class="selector-grid">
+          <div>
+            <div class="select-label">기준 연도 (최신)</div>
+            <select id="selTargetYear" class="custom-select" onchange="renderAnalytics()">
+              <option value="2026" selected>2026년</option>
+              <option value="2025">2025년</option>
+            </select>
+          </div>
+          <div>
+            <div class="select-label">비교 연도 (과거)</div>
+            <select id="selBaseYear" class="custom-select" onchange="renderAnalytics()">
+              <option value="2025" selected>2025년</option>
+              <option value="2024">2024년</option>
+            </select>
+          </div>
+          <div>
+            <div class="select-label">비교 월</div>
+            <select id="selCompareMonth" class="custom-select" onchange="renderAnalytics()">
+              <option value="1">1월</option>
+              <option value="2">2월</option>
+              <option value="3">3월</option>
+              <option value="4">4월</option>
+              <option value="5">5월</option>
+              <option value="6">6월</option>
+              <option value="7">7월</option>
+              <option value="8">8월</option>
+              <option value="9" selected>9월</option>
+              <option value="10">10월</option>
+              <option value="11">11월</option>
+              <option value="12">12월</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="compare-card" style="background: #1e272e; color: #fff;">
+        <div class="compare-header">
+          <div style="font-size: 13px; font-weight: bold; color: #d2dae2;" id="annualCompareTitle">연간 총 매출 성장률</div>
+          <span class="growth-badge growth-up" id="annualGrowthBadge">+0%</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0;">
+          <div>
+            <div style="font-size: 11px; color: #a4b0be;" id="prevYearName">과거 연도</div>
+            <div style="font-size: 16px; font-weight: bold; color: #d2dae2;" id="prevYearTotalRev">0원</div>
+          </div>
+          <div style="font-size: 20px; color: #4cd137;">➔</div>
+          <div style="text-align: right;">
+            <div style="font-size: 11px; color: #54a0ff;" id="currYearName">기준 연도</div>
+            <div style="font-size: 20px; font-weight: bold; color: #54a0ff;" id="currYearTotalRev">0원</div>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: #a4b0be; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 8px; display: flex; justify-content: space-between;">
+          <span>순이익 차이: <b id="annualNetProfitDiff" style="color: #4cd137;">+0원</b></span>
+          <span>기준 연도 지출: <b id="currYearTotalExp" style="color: #ff7675;">0원</b></span>
+        </div>
+      </div>
+
+      <div class="compare-card">
+        <div class="compare-header">
+          <div style="font-size: 13px; font-weight: bold; color: #2f3542;" id="yoyTitle">동월 성장률 분석</div>
+          <span class="growth-badge growth-up" id="yoyBadge">+0%</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 13px; margin-top: 6px;">
+          <span style="color: #718093;"><span id="baseMonthLabel">과거 동월</span>: <b id="lastYearSameMonthRev" style="color: #2f3542;">0원</b></span>
+          <span style="color: #718093;"><span id="targetMonthLabel">기준 동월</span>: <b id="thisYearMonthRev" style="color: #0984e3;">0원</b></span>
+        </div>
+      </div>
+
+      <div class="compare-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <div style="font-size: 13px; font-weight: bold; color: #2f3542;" id="chartHeaderTitle">월별 매출 맞비교</div>
+        </div>
+        <div style="font-size: 11px; color: #718093; margin-bottom: 8px;" id="chartLegendDesc">
+          <span style="color: #0984e3;">■ 기준 연도</span> &nbsp;&nbsp; 
+          <span style="color: #b2bec3;">■ 비교 연도</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="yearlyChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 상세 바텀시트 모달 -->
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-bar"></div>
+      <div class="modal-header">
+        <div class="modal-name" id="mName">고객명/거래처</div>
+        <div class="modal-price" id="mPrice">0원</div>
+      </div>
+      <div id="mSub" style="font-size: 12px; color: #8395a7; margin-bottom: 12px;"></div>
+      <hr style="border: 0; border-top: 1px solid #f1f2f6; margin-bottom: 14px;">
+      
+      <div class="modal-row" id="mPhoneRow">
+        <div class="modal-label">연락처</div>
+        <div class="modal-val" id="mPhone">010-0000-0000</div>
+        <div class="btn-group">
+          <a class="btn btn-phone" id="mCallBtn" href="#">📞 전화걸기</a>
+          <a class="btn btn-phone" id="mSmsBtn" href="#" style="background: #e8f5e9; color: #2e7d32;">💬 문자보내기</a>
+        </div>
+      </div>
+
+      <div class="modal-row">
+        <div class="modal-label">방문 주소 / 장소</div>
+        <div class="modal-val" id="mAddress">주소 정보</div>
+      </div>
+
+      <div class="modal-row">
+        <div class="modal-label">메모 및 특이사항</div>
+        <div class="modal-val" id="mMemo" style="background: #f8f9fa; padding: 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; white-space: pre-wrap;">-</div>
+      </div>
+
+      <button class="btn-close" onclick="closeModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const CLIENT_ID = '1079457531355-hprg08vm8l23utt6cqod04iom3o0ql4a.apps.googleusercontent.com';
+  const SCOPES = 'https://www.googleapis.com/auth/calendar.events.readonly';
+
+  let tokenClient;
+  let allEvents = [];
+  let naverEvents = [];
+  let currentFilter = 'ALL';
+  let viewDate = new Date();
+  let chartInstance = null;
+
+  window.onload = function() {
+    updateMonthLabel();
+
+    const savedToken = localStorage.getItem('g_token');
+    const tokenExp = localStorage.getItem('g_token_exp');
+    const now = Date.now();
+
+    const savedNaver = localStorage.getItem('naver_granular_orders');
+    if (savedNaver) {
+      try {
+        naverEvents = JSON.parse(savedNaver);
+        renderDashboard();
+      } catch(e) {}
+    }
+
+    if (savedToken && tokenExp && now < parseInt(tokenExp, 10)) {
+      setConnectedUI();
+      fetchCalendarEvents(savedToken);
+    }
+
+    initGoogleClient();
+  };
+
+  function initGoogleClient() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: async (resp) => {
+        if (resp.error !== undefined) throw (resp);
+        
+        const expTime = Date.now() + (resp.expires_in ? (resp.expires_in - 300) * 1000 : 3300 * 1000);
+        localStorage.setItem('g_token', resp.access_token);
+        localStorage.setItem('g_token_exp', expTime);
+
+        setConnectedUI();
+        await fetchCalendarEvents(resp.access_token);
+      },
+    });
+  }
+
+  function setConnectedUI() {
+    document.getElementById('syncStatus').innerText = '● 연결됨';
+    document.getElementById('syncStatus').style.color = '#0984e3';
+    document.getElementById('loginBox').style.display = 'none';
+  }
+
+  function requestCalendarAuth() {
+    tokenClient.requestAccessToken({ prompt: '' });
+  }
+
+  function switchView(view) {
+    const monthlyView = document.getElementById('monthlyView');
+    const analyticsView = document.getElementById('analyticsView');
+    const tabMonthly = document.getElementById('tabMonthly');
+    const tabAnalytics = document.getElementById('tabAnalytics');
+
+    if (view === 'MONTHLY') {
+      monthlyView.style.display = 'block';
+      analyticsView.style.display = 'none';
+      tabMonthly.classList.add('active');
+      tabAnalytics.classList.remove('active');
+      renderDashboard();
+    } else {
+      monthlyView.style.display = 'none';
+      analyticsView.style.display = 'block';
+      tabMonthly.classList.remove('active');
+      tabAnalytics.classList.add('active');
+      renderAnalytics();
+    }
+  }
+
+  function changeMonth(delta) {
+    viewDate.setMonth(viewDate.getMonth() + delta);
+    updateMonthLabel();
+    renderDashboard();
+  }
+
+  function updateMonthLabel() {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth() + 1;
+    document.getElementById('currentMonthLabel').innerText = `${year}년 ${month}월`;
+    const btnText = document.getElementById('btnSyncText');
+    if (btnText) {
+      btnText.innerText = `${month}월 스마트스토어 동기화`;
+    }
+  }
+
+  function setFilter(type, el) {
+    currentFilter = type;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    el.classList.add('active');
+    renderDashboard();
+  }
+
+  // ★ 상대 경로(/api/naver-orders-month)로 변경되어 PC와 배포 환경 모두 호환
+  async function syncCurrentMonthNaver() {
+    const targetYear = viewDate.getFullYear();
+    const targetMonth = viewDate.getMonth() + 1;
+    const btn = document.getElementById('btnSyncNaver');
+    const btnText = document.getElementById('btnSyncText');
+
+    if (btn) {
+      btn.disabled = true;
+      if (btnText) btnText.innerText = `${targetMonth}월 데이터 수집 중...`;
+    }
+
+    try {
+      const res = await fetch(`/api/naver-orders-month?year=${targetYear}&month=${targetMonth}`);
+      if (!res.ok) throw new Error('서버 통신 실패 (서버 가동 여부를 확인해 주세요)');
+      
+      const data = await res.json();
+      const orderList = (data && data.elements) ? data.elements : [];
+
+      const targetPrefix = `${targetYear}.${String(targetMonth).padStart(2, '0')}`;
+      naverEvents = naverEvents.filter(item => !item.date.startsWith(targetPrefix));
+
+      orderList.forEach((item) => {
+        const rawDate = item.settleCompletedDate || item.settleBasisStartDate || '';
+        if (!rawDate) return;
+
+        const dateStr = rawDate.substring(0, 10).replace(/-/g, '.');
+        const payAmount = item.paySettleAmount || (item.settleAmount + Math.abs(item.commissionSettleAmount || 0));
+        const commAmount = Math.abs(item.commissionSettleAmount || 0);
+        const actualDeposit = item.settleAmount || 0;
+
+        if (payAmount > 0) {
+          const supply = Math.round(payAmount / 1.1);
+          const vat = payAmount - supply;
+          naverEvents.push({
+            type: 'REV',
+            isTaxReportable: true,
+            taxProofType: '온라인매출',
+            rawDate: dateStr,
+            date: dateStr,
+            year: targetYear,
+            month: targetMonth,
+            item: `스마트스토어 정산매출 (${dateStr})`,
+            price: payAmount,
+            supply: supply,
+            vat: vat,
+            method: '스마트스토어',
+            badgeClass: 'badge-naver',
+            target: '네이버페이(국민사업자)',
+            name: `네이버페이 입금건`,
+            phone: '',
+            address: '네이버 스마트스토어 온라인 정산',
+            memo: `정산완료일: ${dateStr}\n통장 실입금액: ${actualDeposit.toLocaleString()}원\n차감 수수료: ${commAmount.toLocaleString()}원`
+          });
+        }
+
+        if (commAmount > 0) {
+          const supply = Math.round(commAmount / 1.1);
+          const vat = commAmount - supply;
+          naverEvents.push({
+            type: 'EXP',
+            isTaxReportable: true,
+            taxProofType: '세금계산서',
+            rawDate: dateStr,
+            date: dateStr,
+            year: targetYear,
+            month: targetMonth,
+            item: `스마트스토어 판매수수료 공제`,
+            price: commAmount,
+            supply: supply,
+            vat: vat,
+            method: '카드지출',
+            badgeClass: 'badge-expense',
+            target: '네이버 정산차감',
+            name: '네이버파이낸셜(주)',
+            phone: '',
+            address: '네이버파이낸셜',
+            memo: `매출 ${payAmount.toLocaleString()}원에 대한 수수료 차감`
+          });
+        }
+      });
+
+      localStorage.setItem('naver_granular_orders', JSON.stringify(naverEvents));
+      renderDashboard();
+      alert(`✔ ${targetYear}년 ${targetMonth}월 정산 내역이 성공적으로 반영되었습니다!`);
+
+    } catch (err) {
+      alert(`동기화 실패: ${err.message}`);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        if (btnText) btnText.innerText = `${targetMonth}월 스마트스토어 동기화`;
+      }
+    }
+  }
+
+  async function fetchCalendarEvents(accessToken) {
+    document.getElementById('loading').style.display = 'block';
+    
+    const timeMin = new Date('2024-01-01T00:00:00Z').toISOString();
+    const timeMax = new Date('2027-12-31T23:59:59Z').toISOString();
+
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=2500`;
+
+    try {
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+
+      if (response.status === 401) {
+        localStorage.removeItem('g_token');
+        localStorage.removeItem('g_token_exp');
+        document.getElementById('loginBox').style.display = 'block';
+        document.getElementById('syncStatus').innerText = '인증 만료';
+        document.getElementById('syncStatus').style.color = '#e74c3c';
+        return;
+      }
+
+      const data = await response.json();
+      const events = data.items || [];
+      
+      allEvents = [];
+      events.forEach(evt => {
+        const parsed = parseEventToEntry(evt);
+        if (parsed) allEvents.push(parsed);
+      });
+
+      renderDashboard();
+    } catch (err) {
+      console.error('캘린더 로딩 오류:', err);
+    } finally {
+      document.getElementById('loading').style.display = 'none';
+    }
+  }
+
+  function parseEventToEntry(event) {
+    const title = event.summary || '';
+    const desc = event.description || '';
+    const isExpense = title.includes('지출') || title.includes('경비');
+    const isRevenue = title.includes('매출');
+
+    if (!isExpense && !isRevenue) return null;
+
+    let total = 0;
+    const commaMatch = title.match(/(\d{1,3}(?:,\d{3})+)\s*원?/);
+    const manMatch = title.match(/(\d+(?:\.\d+)?)\s*만\s*원?/);
+    const wonMatch = title.match(/(\d{4,})\s*원/);
+
+    if (commaMatch) total = parseInt(commaMatch[1].replace(/,/g, ''), 10);
+    else if (manMatch) total = Math.round(parseFloat(manMatch[1]) * 10000);
+    else if (wonMatch) total = parseInt(wonMatch[1], 10);
+
+    const hasCard = title.includes('카드');
+    const hasTaxBill = title.includes('세금계산서');
+    const hasCashReceipt = title.includes('현금영수증');
+    const hasSmartStore = title.includes('스마트스토어') || title.includes('네이버');
+    const hasVatMention = title.includes('부가세포함');
+
+    const isTaxReportable = hasCard || hasTaxBill || hasCashReceipt || hasSmartStore || (isRevenue && hasVatMention);
+
+    let supply = total;
+    let vat = 0;
+    if (isTaxReportable && total > 0) {
+      supply = Math.round(total / 1.1);
+      vat = total - supply;
+    }
+
+    let type = isExpense ? 'EXP' : 'REV';
+    let method = isExpense ? '지출' : '현금매출';
+    let badgeClass = isExpense ? 'badge-expense' : 'badge-cash';
+    let taxProofType = '무증빙';
+
+    if (hasCard) {
+      method = isExpense ? '카드지출' : '카드매출';
+      badgeClass = isExpense ? 'badge-expense' : 'badge-card';
+      taxProofType = '신용카드';
+    } else if (hasTaxBill) {
+      method = isExpense ? '세금계산서(매입)' : '세금계산서';
+      badgeClass = isExpense ? 'badge-expense' : 'badge-tax';
+      taxProofType = '세금계산서';
+    } else if (hasCashReceipt) {
+      method = isExpense ? '지출증빙(영수증)' : '현금영수증';
+      badgeClass = isExpense ? 'badge-expense' : 'badge-tax';
+      taxProofType = '현금영수증';
+    } else if (hasSmartStore) {
+      method = '스마트스토어';
+      badgeClass = 'badge-card';
+      taxProofType = '온라인매출';
+    } else if (isRevenue && hasVatMention) {
+      method = '계좌입금(부가세)';
+      badgeClass = 'badge-tax';
+      taxProofType = '세금계산서발급예정';
+    }
+
+    let target = '계좌/현금';
+    if (title.includes('국민사업자') || title.includes('국민')) target = '국민은행(사업자)';
+    else if (title.includes('토스')) target = '토스뱅크';
+    else if (title.includes('현대')) target = '현대카드';
+    else if (title.includes('신한')) target = '신한은행';
+
+    const combinedText = `${title} ${desc}`;
+    const phoneMatch = combinedText.match(/(01[016789]-?\d{3,4}-?\d{4})/);
+    const phone = phoneMatch ? phoneMatch[1] : '';
+
+    let address = event.location || '';
+    if (!address) {
+      const addrMatch = title.match(/([가-힣A-Za-z0-9]+[시|군|구|동|읍|면|로|길]\s+[0-9\-가-힣\s]+?(?:아파트|빌라|빌딩|오피스텔|타운|마을|단지|호|층|동)?(?=\s+[010|세입자|고객|사장|원형|스탠드|벽걸이|드럼|통돌이|세탁기|에어컨]|$))/);
+      if (addrMatch) {
+        address = addrMatch[1].trim();
+      } else {
+        const simpleAddr = title.match(/([가-힣]+[동|리|로]\s+\d+[\-\d]*\s*[^0-9\s]*\s*\d+호?)/);
+        if (simpleAddr) address = simpleAddr[1].trim();
+      }
+    }
+    if (!address) address = '위치 미등록';
+
+    let name = isExpense ? '거래처/지출처' : '고객 정보 없음';
+    if (desc) {
+      const cleanDesc = desc.replace(phone, '').trim();
+      if (cleanDesc) name = cleanDesc.split(/\s+/)[0];
+    }
+    if (name === '고객 정보 없음' || name === '거래처/지출처') {
+      const nameMatch = title.match(/(세입자|고객|[가-힣]{2,4}\s*고객|[가-힣]{2,4}\s*사장)/);
+      if (nameMatch) {
+        name = nameMatch[1];
+      } else if (address !== '위치 미등록') {
+        name = address.split(' ')[0] + ' 고객';
+      }
+    }
+
+    let item = isExpense ? '경비 항목' : '홈케어 청소';
+    const itemMatch = title.match(/(드럼세탁기|통돌이세탁기|세탁기|에어컨|벽걸이|스탠드|시스템|원형\d+대|\d+대)/);
+    if (itemMatch) {
+      item = itemMatch[1].trim();
+    }
+
+    const startObj = event.start.dateTime || event.start.date;
+    const dateStr = startObj.substring(0, 10).replace(/-/g, '.');
+
+    return {
+      type: type,
+      isTaxReportable: isTaxReportable,
+      taxProofType: taxProofType,
+      rawDate: startObj,
+      date: dateStr,
+      year: parseInt(dateStr.split('.')[0], 10),
+      month: parseInt(dateStr.split('.')[1], 10),
+      item: item,
+      price: total,
+      supply: supply,
+      vat: vat,
+      method: method,
+      badgeClass: badgeClass,
+      target: target,
+      name: name,
+      phone: phone,
+      address: address,
+      memo: title
+    };
+  }
+
+  function getCombinedList() {
+    const list = [...allEvents, ...naverEvents];
+    return list.sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function renderDashboard() {
+    const targetYear = viewDate.getFullYear();
+    const targetMonth = String(viewDate.getMonth() + 1).padStart(2, '0');
+    const targetPrefix = `${targetYear}.${targetMonth}`;
+
+    const combined = getCombinedList();
+    const monthData = combined.filter(item => item.date.startsWith(targetPrefix));
+
+    let revTotal = 0, revSupply = 0, revVat = 0;
+    let expTotal = 0, expSupply = 0, expVat = 0;
+
+    monthData.forEach(item => {
+      if (item.type === 'REV') {
+        revTotal += item.price;
+        revSupply += item.supply;
+        revVat += item.vat;
+      } else if (item.type === 'EXP') {
+        expTotal += item.price;
+        expSupply += item.supply;
+        expVat += item.vat;
+      }
+    });
+
+    const netProfit = revSupply - expSupply;
+    const netVat = Math.max(0, revVat - expVat);
+
+    document.getElementById('netProfit').innerText = netProfit.toLocaleString() + '원';
+    document.getElementById('totalRev').innerText = revTotal.toLocaleString() + '원';
+    document.getElementById('totalExp').innerText = expTotal.toLocaleString() + '원';
+    document.getElementById('revVat').innerText = revVat.toLocaleString() + '원';
+    document.getElementById('netVat').innerText = netVat.toLocaleString() + '원';
+
+    const displayList = monthData.filter(item => {
+      if (currentFilter === 'REV') return item.type === 'REV';
+      if (currentFilter === 'EXP') return item.type === 'EXP';
+      return true;
+    });
+
+    document.getElementById('recordCount').innerText = `${displayList.length}건`;
+
+    const listEl = document.getElementById('salesList');
+    listEl.innerHTML = '';
+
+    if (displayList.length === 0) {
+      listEl.innerHTML = `<div style="text-align:center; padding: 40px; color: #a4b0be; font-size: 13px;">${targetYear}년 ${targetMonth}월에 등록된 내역이 없습니다.</div>`;
+      return;
+    }
+
+    displayList.forEach(item => {
+      const isExp = item.type === 'EXP';
+      const card = document.createElement('div');
+      card.className = 'item-card';
+      
+      card.addEventListener('click', () => {
+        openModal(item);
+      });
+
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="card-date">${item.date}</span>
+          <span class="badge ${item.badgeClass}">${item.method}</span>
+        </div>
+        <div class="card-title">${item.item}</div>
+        <div class="card-bottom">
+          <span class="card-target">${item.name}</span>
+          <span class="card-price ${isExp ? 'price-exp' : 'price-rev'}">
+            ${isExp ? '-' : ''}${item.price.toLocaleString()}원
+          </span>
+        </div>
+        <div class="card-sub">
+          ${item.vat > 0 ? `공급가 ${item.supply.toLocaleString()}원 (부가세 ${item.vat.toLocaleString()}원)` : '무증빙 (부가세 없음)'}
+        </div>
+      `;
+      listEl.appendChild(card);
+    });
+  }
+
+  function exportTaxReport() {
+    const targetYear = viewDate.getFullYear();
+    const targetMonth = String(viewDate.getMonth() + 1).padStart(2, '0');
+    const targetPrefix = `${targetYear}.${targetMonth}`;
+
+    const combined = getCombinedList();
+    const taxData = combined.filter(item => item.date.startsWith(targetPrefix) && item.isTaxReportable);
+
+    if (taxData.length === 0) {
+      alert(`${targetYear}년 ${targetMonth}월에는 국세청 신고 대상 내역이 없습니다.`);
+      return;
+    }
+
+    let csv = '\uFEFF일자,구분,증빙유형,품목/적요,공급가액,부가세,합계금액,결제수단,고객및거래처명\n';
+    let sumSupply = 0, sumVat = 0, sumTotal = 0;
+
+    taxData.forEach(item => {
+      const typeLabel = item.type === 'REV' ? '매출' : '매입(지출)';
+      const safeItem = `"${item.item.replace(/"/g, '""')}"`;
+      const safeName = `"${item.name.replace(/"/g, '""')}"`;
+      
+      sumSupply += item.supply;
+      sumVat += item.vat;
+      sumTotal += item.price;
+
+      csv += `${item.date},${typeLabel},${item.taxProofType},${safeItem},${item.supply},${item.vat},${item.price},${item.target},${safeName}\n`;
+    });
+
+    csv += `합계,-,-,-,${sumSupply},${sumVat},${sumTotal},-,\n`;
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `쿨피스케어_세무신고용_${targetYear}년${targetMonth}월.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function renderAnalytics() {
+    const targetYear = parseInt(document.getElementById('selTargetYear').value, 10);
+    const baseYear = parseInt(document.getElementById('selBaseYear').value, 10);
+    const selectedMonth = parseInt(document.getElementById('selCompareMonth').value, 10);
+
+    const combined = getCombinedList();
+
+    const targetMonthlyRev = new Array(12).fill(0);
+    const baseMonthlyRev = new Array(12).fill(0);
+
+    let targetTotalRev = 0, targetTotalRevSupply = 0, targetTotalExp = 0, targetTotalExpSupply = 0;
+    let baseTotalRev = 0, baseTotalRevSupply = 0, baseTotalExp = 0, baseTotalExpSupply = 0;
+
+    combined.forEach(item => {
+      const mIdx = item.month - 1;
+      
+      if (item.year === targetYear) {
+        if (item.type === 'REV') {
+          targetMonthlyRev[mIdx] += item.price;
+          targetTotalRev += item.price;
+          targetTotalRevSupply += item.supply;
+        } else if (item.type === 'EXP') {
+          targetTotalExp += item.price;
+          targetTotalExpSupply += item.supply;
+        }
+      } else if (item.year === baseYear) {
+        if (item.type === 'REV') {
+          baseMonthlyRev[mIdx] += item.price;
+          baseTotalRev += item.price;
+          baseTotalRevSupply += item.supply;
+        } else if (item.type === 'EXP') {
+          baseTotalExp += item.price;
+          baseTotalExpSupply += item.supply;
+        }
+      }
+    });
+
+    document.getElementById('annualCompareTitle').innerText = `연간 총 매출 성장률 (${baseYear}년 vs ${targetYear}년)`;
+    document.getElementById('prevYearName').innerText = `${baseYear}년 연간 누적`;
+    document.getElementById('currYearName').innerText = `${targetYear}년 연간 누적`;
+    document.getElementById('prevYearTotalRev').innerText = baseTotalRev.toLocaleString() + '원';
+    document.getElementById('currYearTotalRev').innerText = targetTotalRev.toLocaleString() + '원';
+    document.getElementById('currYearTotalExp').innerText = targetTotalExp.toLocaleString() + '원';
+
+    const targetNetProfit = targetTotalRevSupply - targetTotalExpSupply;
+    const baseNetProfit = baseTotalRevSupply - baseTotalExpSupply;
+    const diffNetProfit = targetNetProfit - baseNetProfit;
+    document.getElementById('annualNetProfitDiff').innerText = `${diffNetProfit >= 0 ? '+' : ''}${diffNetProfit.toLocaleString()}원`;
+
+    const annualBadge = document.getElementById('annualGrowthBadge');
+    if (baseTotalRev > 0) {
+      const annualGrowth = Math.round(((targetTotalRev - baseTotalRev) / baseTotalRev) * 100);
+      annualBadge.className = annualGrowth >= 0 ? 'growth-badge growth-up' : 'growth-badge growth-down';
+      annualBadge.innerText = `${annualGrowth >= 0 ? '+' : ''}${annualGrowth}% ${annualGrowth >= 0 ? '▲' : '▼'}`;
+    } else {
+      annualBadge.className = 'growth-badge growth-up';
+      annualBadge.innerText = targetTotalRev > 0 ? '+100% ▲' : '기록 없음';
+    }
+
+    const targetMonthRev = targetMonthlyRev[selectedMonth - 1];
+    const baseMonthRev = baseMonthlyRev[selectedMonth - 1];
+
+    document.getElementById('yoyTitle').innerText = `${selectedMonth}월 동월 매출 성장률 (${baseYear} vs ${targetYear})`;
+    document.getElementById('baseMonthLabel').innerText = `${baseYear}년 ${selectedMonth}월`;
+    document.getElementById('targetMonthLabel').innerText = `${targetYear}년 ${selectedMonth}월`;
+    document.getElementById('lastYearSameMonthRev').innerText = baseMonthRev.toLocaleString() + '원';
+    document.getElementById('thisYearMonthRev').innerText = targetMonthRev.toLocaleString() + '원';
+
+    const yoyBadge = document.getElementById('yoyBadge');
+    if (baseMonthRev > 0) {
+      const rate = Math.round(((targetMonthRev - baseMonthRev) / baseMonthRev) * 100);
+      yoyBadge.className = rate >= 0 ? 'growth-badge growth-up' : 'growth-badge growth-down';
+      yoyBadge.innerText = `${rate >= 0 ? '+' : ''}${rate}% ${rate >= 0 ? '▲' : '▼'}`;
+    } else {
+      yoyBadge.className = 'growth-badge growth-up';
+      yoyBadge.innerText = targetMonthRev > 0 ? '+100% ▲' : '비교 데이터 없음';
+    }
+
+    document.getElementById('chartHeaderTitle').innerText = `12개월 매출 추이 비교 (${baseYear} vs ${targetYear})`;
+    drawYearlyComparisonChart(targetYear, baseYear, targetMonthlyRev, baseMonthlyRev);
+  }
+
+  function drawYearlyComparisonChart(targetYear, baseYear, targetData, baseData) {
+    const ctx = document.getElementById('yearlyChart').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
+        datasets: [
+          {
+            label: `${targetYear}년 매출`,
+            data: targetData,
+            backgroundColor: '#0984e3',
+            borderRadius: 4
+          },
+          {
+            label: `${baseYear}년 매출`,
+            data: baseData,
+            backgroundColor: '#b2bec3',
+            borderRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: value => (value / 10000) + '만',
+              font: { size: 10 }
+            }
+          },
+          x: { ticks: { font: { size: 10 } } }
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: { boxWidth: 12, font: { size: 11 } }
+          }
+        }
+      }
+    });
+  }
+
+  function openModal(item) {
+    try {
+      const isExp = item.type === 'EXP';
+      
+      document.getElementById('mName').innerText = item.name || '고객 정보 없음';
+      
+      const priceText = `${isExp ? '-' : ''}${(item.price || 0).toLocaleString()}원`;
+      const priceEl = document.getElementById('mPrice');
+      priceEl.innerText = priceText;
+      priceEl.style.color = isExp ? '#d63031' : '#0984e3';
+
+      document.getElementById('mSub').innerText = `${item.item || ''} | 공급가 ${(item.supply || 0).toLocaleString()}원 (부가세 ${(item.vat || 0).toLocaleString()}원)`;
+      
+      const phoneRow = document.getElementById('mPhoneRow');
+      if (item.phone && item.phone.trim().length > 0) {
+        phoneRow.style.display = 'block';
+        document.getElementById('mPhone').innerText = item.phone;
+        document.getElementById('mCallBtn').href = 'tel:' + item.phone;
+        document.getElementById('mSmsBtn').href = 'sms:' + item.phone;
+      } else {
+        phoneRow.style.display = 'none';
+      }
+
+      document.getElementById('mAddress').innerText = item.address || '위치 미등록';
+      document.getElementById('mMemo').innerText = item.memo || '특이사항 없음';
+      
+      document.getElementById('modalOverlay').style.display = 'flex';
+    } catch (err) {
+      console.error('모달 열기 실패:', err);
+    }
+  }
+
+  function closeModal(event) {
+    if (event) event.stopPropagation();
+    document.getElementById('modalOverlay').style.display = 'none';
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
+</script>
+</body>
+</html>
