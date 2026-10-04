@@ -103,6 +103,19 @@
     .btn { padding: 8px 14px; border-radius: 8px; border: none; font-size: 13px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
     .btn-phone { background: #e3f2fd; color: #0984e3; }
     .btn-close { width: 100%; padding: 12px; border-radius: 10px; background: #2f3542; color: #fff; font-size: 15px; margin-top: 16px; border: none; cursor: pointer; font-weight: bold; }
+    .badge-contract { background: #fff4e5; color: #e67e22; }
+    .ct-note { font-size: 11px; color: #a4b0be; margin-top: 10px; }
+    .ct-warn { background: #fff4e5; color: #b9590b; border: 1px solid #ffd8a8; border-radius: 10px; padding: 10px 12px; font-size: 12px; font-weight: bold; margin-bottom: 12px; }
+    .ct-row { background: #fff; border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; border: 1px solid #e1e8ed; }
+    .ct-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .ct-name { font-size: 15px; font-weight: bold; color: #2f3542; }
+    .ct-count { font-size: 12px; color: #a4b0be; }
+    .ct-row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+    .ct-k { font-size: 11px; color: #8395a7; }
+    .ct-v { font-size: 13px; font-weight: bold; color: #2f3542; }
+    .ct-empty { text-align: center; padding: 24px; color: #a4b0be; font-size: 13px; background: #fff; border-radius: 14px; border: 1px solid #e1e8ed; }
+    .ct-help { background: #fff; border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: 12px; color: #57606f; line-height: 1.6; border: 1px dashed #cbd5e1; }
+    .ct-help code { background: #f1f2f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
     .loading-spinner { text-align: center; padding: 30px; font-size: 14px; color: #718093; }
   </style>
 </head>
@@ -117,6 +130,7 @@
   <div class="main-nav">
     <div class="main-tab active" id="tabMonthly" onclick="switchView('MONTHLY')">월간 장부</div>
     <div class="main-tab" id="tabAnalytics" onclick="switchView('ANALYTICS')">연간·월별 비교</div>
+    <div class="main-tab" id="tabContractor" onclick="switchView('CONTRACTOR')">도급 팀장</div>
   </div>
 
   <div class="content">
@@ -276,6 +290,50 @@
       </div>
     </div>
 
+    <!-- 3. 도급 팀장 뷰 -->
+    <div id="contractorView" style="display: none;">
+      <div class="month-nav">
+        <button class="nav-btn" onclick="changeMonth(-1)">◀ 이전달</button>
+        <div class="nav-title" id="contractorMonthLabel">2026년 9월</div>
+        <button class="nav-btn" onclick="changeMonth(1)">다음달 ▶</button>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-title" id="ctDueTitle">지급분 신고 기한</div>
+        <div class="summary-amount" style="color:#fbc531" id="ctTax">0원</div>
+        <div class="summary-divider"></div>
+        <div class="summary-grid">
+          <div><div class="grid-label">세전 지급액 (경비)</div><div class="grid-val exp-val" id="ctGross">0원</div></div>
+          <div><div class="grid-label">실제 이체액</div><div class="grid-val rev-val" id="ctNet">0원</div></div>
+          <div><div class="grid-label">소득세 (3%)</div><div class="grid-val" id="ctIncome">0원</div></div>
+          <div><div class="grid-label">지방소득세 (0.3%)</div><div class="grid-val" id="ctLocal">0원</div></div>
+        </div>
+        <div class="ct-note" id="ctReportDue"></div>
+        <div class="ct-note">기한이 주말·공휴일이면 다음 영업일까지입니다.</div>
+      </div>
+
+      <div class="action-grid">
+        <button class="btn-action btn-export" style="grid-column: 1 / -1;" onclick="exportWithholdingReport()">원천세 신고용 엑셀(CSV)</button>
+      </div>
+
+      <div id="ctWarn" class="ct-warn" style="display:none;"></div>
+
+      <div class="list-title"><span>팀장님별 합계</span></div>
+      <div id="ctByName"></div>
+
+      <div class="list-title" style="margin-top: 14px;">
+        <span>지급 내역</span>
+        <span id="ctCount" style="font-weight: normal; font-size: 12px;">0건</span>
+      </div>
+      <div id="ctList"></div>
+
+      <div class="ct-help">
+        <b>캘린더에 이렇게 적어 주세요</b><br>
+        지급한 날짜에 일정 제목을 <code>도급 김팀장 483,500원</code> 처럼 적으면 실제 이체액으로 보고 세전 금액을 자동 계산해요.<br>
+        세전 금액으로 적고 싶으면 <code>도급 김팀장 50만원 세전</code> 처럼 '세전'을 붙이세요.
+      </div>
+    </div>
+
   </div>
 
   <!-- 상세 바텀시트 모달 -->
@@ -374,37 +432,37 @@
     tokenClient.requestAccessToken({ prompt: '' });
   }
 
-  function switchView(view) {
-    const monthlyView = document.getElementById('monthlyView');
-    const analyticsView = document.getElementById('analyticsView');
-    const tabMonthly = document.getElementById('tabMonthly');
-    const tabAnalytics = document.getElementById('tabAnalytics');
+  let currentView = 'MONTHLY';
 
-    if (view === 'MONTHLY') {
-      monthlyView.style.display = 'block';
-      analyticsView.style.display = 'none';
-      tabMonthly.classList.add('active');
-      tabAnalytics.classList.remove('active');
-      renderDashboard();
-    } else {
-      monthlyView.style.display = 'none';
-      analyticsView.style.display = 'block';
-      tabMonthly.classList.remove('active');
-      tabAnalytics.classList.add('active');
-      renderAnalytics();
-    }
+  function switchView(view) {
+    currentView = view;
+    const views = { MONTHLY: ['monthlyView', 'tabMonthly'], ANALYTICS: ['analyticsView', 'tabAnalytics'], CONTRACTOR: ['contractorView', 'tabContractor'] };
+    Object.keys(views).forEach(key => {
+      const [viewId, tabId] = views[key];
+      document.getElementById(viewId).style.display = key === view ? 'block' : 'none';
+      document.getElementById(tabId).classList.toggle('active', key === view);
+    });
+    renderCurrentView();
+  }
+
+  function renderCurrentView() {
+    if (currentView === 'ANALYTICS') renderAnalytics();
+    else if (currentView === 'CONTRACTOR') renderContractors();
+    else renderDashboard();
   }
 
   function changeMonth(delta) {
+    viewDate.setDate(1);  // 31일 같은 날짜에서 달이 두 칸 넘어가는 문제 방지
     viewDate.setMonth(viewDate.getMonth() + delta);
     updateMonthLabel();
-    renderDashboard();
+    renderCurrentView();
   }
 
   function updateMonthLabel() {
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth() + 1;
     document.getElementById('currentMonthLabel').innerText = `${year}년 ${month}월`;
+    document.getElementById('contractorMonthLabel').innerText = `${year}년 ${month}월`;
     const btnText = document.getElementById('btnSyncText');
     if (btnText) {
       btnText.innerText = `${month}월 스마트스토어 동기화`;
@@ -608,7 +666,7 @@
         if (parsed) allEvents.push(parsed);
       });
 
-      renderDashboard();
+      renderCurrentView();
     } catch (err) {
       console.error('캘린더 로딩 오류:', err);
     } finally {
@@ -621,8 +679,9 @@
     const desc = event.description || '';
     const isExpense = title.includes('지출') || title.includes('경비');
     const isRevenue = title.includes('매출');
+    const isContractor = isContractorTitle(title);
 
-    if (!isExpense && !isRevenue) return null;
+    if (!isExpense && !isRevenue && !isContractor) return null;
 
     let total = 0;
     const commaMatch = title.match(/(\d{1,3}(?:,\d{3})+)\s*원?/);
@@ -632,6 +691,8 @@
     if (commaMatch) total = parseInt(commaMatch[1].replace(/,/g, ''), 10);
     else if (manMatch) total = Math.round(parseFloat(manMatch[1]) * 10000);
     else if (wonMatch) total = parseInt(wonMatch[1], 10);
+
+    if (isContractor) return parseContractorEntry(event, title, total);
 
     const hasCard = title.includes('카드');
     const hasTaxBill = title.includes('세금계산서');
@@ -740,6 +801,191 @@
       address: address,
       memo: title
     };
+  }
+
+  // ── 도급 팀장 지급 (사업소득 3.3% 원천징수) ──────────────────
+
+  // 세전 지급액 → 소득세 3%, 지방소득세(소득세의 10%), 각각 10원 미만 절사
+  function calcWithholding(gross) {
+    const incomeTax = Math.floor(gross * 0.03 / 10) * 10;
+    const localTax = Math.floor(incomeTax * 0.1 / 10) * 10;
+    return { incomeTax, localTax, totalTax: incomeTax + localTax, net: gross - incomeTax - localTax };
+  }
+
+  // 실제 이체액 → 세전 지급액 역계산 (딱 맞는 금액 중 가장 깔끔한 숫자 선택)
+  function grossFromNet(net) {
+    const guess = Math.round(net / 0.967);
+    let best = null;
+    for (let g = guess - 40; g <= guess + 40; g++) {
+      if (g <= 0 || calcWithholding(g).net !== net) continue;
+      const zeros = (String(g).match(/0+$/) || [''])[0].length;
+      if (!best || zeros > best.zeros || (zeros === best.zeros && g > best.gross)) best = { gross: g, zeros };
+    }
+    return best ? { gross: best.gross, exact: true } : { gross: guess, exact: false };
+  }
+
+  function isContractorTitle(title) {
+    return title.includes('도급') || (title.includes('팀장') && !title.includes('매출'));
+  }
+
+  function parseContractorEntry(event, title, total) {
+    const startObj = event.start.dateTime || event.start.date;
+    const dateStr = startObj.substring(0, 10).replace(/-/g, '.');
+
+    // 팀장 이름: "김팀장", "김 팀장", "김철수팀장" → "김팀장" 형태로 통일
+    let name = '이름 미확인';
+    const nm = title.match(/([가-힣]{1,4})\s*팀장/);
+    if (nm) name = `${nm[1]}팀장`;
+    else {
+      const after = title.match(/도급\s*([가-힣]{2,4})/);
+      if (after) name = after[1];
+    }
+
+    // 제목에 '세전'이 있으면 적은 금액을 세전 총액으로, 없으면 실제 이체액으로 봄
+    let gross, net, exact = true;
+    if (title.includes('세전')) {
+      gross = total;
+      net = calcWithholding(gross).net;
+    } else {
+      net = total;
+      const r = grossFromNet(net);
+      gross = r.gross; exact = r.exact;
+    }
+    const w = calcWithholding(gross);
+    const needsCheck = total <= 0 || !exact;
+
+    return {
+      type: 'EXP',
+      isContractor: true,
+      needsCheck: needsCheck,
+      isTaxReportable: true,
+      taxProofType: '원천징수(사업소득)',
+      rawDate: startObj,
+      date: dateStr,
+      year: parseInt(dateStr.split('.')[0], 10),
+      month: parseInt(dateStr.split('.')[1], 10),
+      item: '도급비 지급',
+      price: gross,
+      supply: gross,
+      vat: 0,
+      gross: gross,
+      incomeTax: w.incomeTax,
+      localTax: w.localTax,
+      netPaid: total > 0 ? w.net : 0,
+      method: '도급(3.3%)',
+      badgeClass: 'badge-contract',
+      target: '계좌이체',
+      name: name,
+      phone: '',
+      address: '-',
+      memo: `${title}\n\n세전 지급액: ${gross.toLocaleString()}원\n소득세(3%): ${w.incomeTax.toLocaleString()}원\n지방소득세(0.3%): ${w.localTax.toLocaleString()}원\n실제 이체액: ${w.net.toLocaleString()}원` +
+            (needsCheck ? '\n\n⚠ 금액을 정확히 계산하지 못했습니다. 캘린더 제목의 금액을 확인해 주세요.' : '')
+    };
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function renderContractors() {
+    const y = viewDate.getFullYear();
+    const m = viewDate.getMonth() + 1;
+    const prefix = `${y}.${String(m).padStart(2, '0')}`;
+    const list = allEvents.filter(it => it.isContractor && it.date.startsWith(prefix))
+                          .sort((a, b) => a.date.localeCompare(b.date));
+
+    // 신고 기한: 지급한 다음 달 10일
+    const due = new Date(y, m, 10);
+    const dueText = `${due.getFullYear()}년 ${due.getMonth() + 1}월 10일`;
+    const endOfNext = new Date(y, m + 1, 0);
+    const reportText = `${endOfNext.getFullYear()}년 ${endOfNext.getMonth() + 1}월 ${endOfNext.getDate()}일`;
+    document.getElementById('ctDueTitle').innerText = `${y}년 ${m}월 지급분 → ${dueText}까지 신고·납부`;
+    document.getElementById('ctReportDue').innerText = `간이지급명세서(사업소득) 제출: ${reportText}까지`;
+
+    let sumGross = 0, sumIncome = 0, sumLocal = 0, sumNet = 0;
+    const byName = {};
+    list.forEach(it => {
+      sumGross += it.gross; sumIncome += it.incomeTax; sumLocal += it.localTax; sumNet += it.netPaid;
+      if (!byName[it.name]) byName[it.name] = { count: 0, gross: 0, income: 0, local: 0, net: 0 };
+      const b = byName[it.name];
+      b.count++; b.gross += it.gross; b.income += it.incomeTax; b.local += it.localTax; b.net += it.netPaid;
+    });
+
+    document.getElementById('ctGross').innerText = sumGross.toLocaleString() + '원';
+    document.getElementById('ctTax').innerText = (sumIncome + sumLocal).toLocaleString() + '원';
+    document.getElementById('ctIncome').innerText = sumIncome.toLocaleString() + '원';
+    document.getElementById('ctLocal').innerText = sumLocal.toLocaleString() + '원';
+    document.getElementById('ctNet').innerText = sumNet.toLocaleString() + '원';
+
+    const warn = list.filter(it => it.needsCheck);
+    const warnEl = document.getElementById('ctWarn');
+    warnEl.style.display = warn.length ? 'block' : 'none';
+    warnEl.innerText = warn.length ? `⚠ 금액 확인이 필요한 일정 ${warn.length}건이 있습니다. 아래 목록에서 눌러서 확인하세요.` : '';
+
+    const names = Object.keys(byName);
+    const tbl = document.getElementById('ctByName');
+    if (names.length === 0) {
+      tbl.innerHTML = `<div class="ct-empty">${y}년 ${m}월에 팀장님 지급 내역이 없습니다.</div>`;
+    } else {
+      tbl.innerHTML = names.map(n => {
+        const b = byName[n];
+        return `<div class="ct-row">
+          <div class="ct-row-top"><span class="ct-name">${escapeHtml(n)}</span><span class="ct-count">${b.count}건</span></div>
+          <div class="ct-row-grid">
+            <div><div class="ct-k">세전 지급액</div><div class="ct-v">${b.gross.toLocaleString()}원</div></div>
+            <div><div class="ct-k">소득세</div><div class="ct-v">${b.income.toLocaleString()}원</div></div>
+            <div><div class="ct-k">지방소득세</div><div class="ct-v">${b.local.toLocaleString()}원</div></div>
+            <div><div class="ct-k">실제 이체액</div><div class="ct-v">${b.net.toLocaleString()}원</div></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    const listEl = document.getElementById('ctList');
+    listEl.innerHTML = '';
+    document.getElementById('ctCount').innerText = `${list.length}건`;
+    list.forEach(it => {
+      const card = document.createElement('div');
+      card.className = 'item-card';
+      card.addEventListener('click', () => openModal(it));
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="card-date">${it.date}</span>
+          <span class="badge ${it.needsCheck ? 'badge-expense' : 'badge-contract'}">${it.needsCheck ? '확인 필요' : '도급(3.3%)'}</span>
+        </div>
+        <div class="card-bottom">
+          <span class="card-title" style="margin:0">${escapeHtml(it.name)}</span>
+          <span class="card-price price-exp">${it.netPaid.toLocaleString()}원 이체</span>
+        </div>
+        <div class="card-sub">세전 ${it.gross.toLocaleString()}원 · 원천세 ${(it.incomeTax + it.localTax).toLocaleString()}원 (소득세 ${it.incomeTax.toLocaleString()} + 지방 ${it.localTax.toLocaleString()})</div>`;
+      listEl.appendChild(card);
+    });
+  }
+
+  function exportWithholdingReport() {
+    const y = viewDate.getFullYear();
+    const m = String(viewDate.getMonth() + 1).padStart(2, '0');
+    const list = allEvents.filter(it => it.isContractor && it.date.startsWith(`${y}.${m}`))
+                          .sort((a, b) => a.date.localeCompare(b.date));
+    if (list.length === 0) {
+      alert(`${y}년 ${m}월에는 팀장님 지급 내역이 없습니다.`);
+      return;
+    }
+    let csv = '﻿지급일,팀장명,세전지급액,소득세(3%),지방소득세(0.3%),원천세합계,실제이체액,확인필요\n';
+    let s = [0, 0, 0, 0];
+    list.forEach(it => {
+      s[0] += it.gross; s[1] += it.incomeTax; s[2] += it.localTax; s[3] += it.netPaid;
+      csv += `${it.date},"${it.name.replace(/"/g, '""')}",${it.gross},${it.incomeTax},${it.localTax},${it.incomeTax + it.localTax},${it.netPaid},${it.needsCheck ? 'O' : ''}\n`;
+    });
+    csv += `합계,-,${s[0]},${s[1]},${s[2]},${s[1] + s[2]},${s[3]},\n`;
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `쿨피스케어_원천세_${y}년${m}월지급분.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   function getCombinedList() {
