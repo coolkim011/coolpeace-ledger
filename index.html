@@ -426,8 +426,26 @@
     }
 
     try {
-      const res = await fetch(`/api/naver-orders-month?year=${targetYear}&month=${targetMonth}`);
-      if (!res.ok) throw new Error('서버 통신 실패 (서버 가동 여부를 확인해 주세요)');
+      const apiUrl = `/api/naver-orders-month?year=${targetYear}&month=${targetMonth}`;
+      let appPw = localStorage.getItem('app_password') || '';
+      if (!appPw) {
+        appPw = prompt('장부 비밀번호를 입력하세요') || '';
+        if (!appPw) throw new Error('비밀번호를 입력해야 동기화할 수 있습니다.');
+      }
+
+      let res = await fetch(apiUrl, { headers: { 'x-app-password': appPw } });
+      if (res.status === 401) {
+        localStorage.removeItem('app_password');
+        appPw = prompt('비밀번호가 맞지 않습니다. 다시 입력하세요') || '';
+        if (!appPw) throw new Error('비밀번호를 입력해야 동기화할 수 있습니다.');
+        res = await fetch(apiUrl, { headers: { 'x-app-password': appPw } });
+        if (res.status === 401) throw new Error('비밀번호가 맞지 않습니다.');
+      }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || '서버 통신 실패 (서버 가동 여부를 확인해 주세요)');
+      }
+      localStorage.setItem('app_password', appPw);
       
       const data = await res.json();
       const orderList = (data && data.elements) ? data.elements : [];

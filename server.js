@@ -1,10 +1,37 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
-const CLIENT_ID = '4VzAP3FHmhTfW5uzwjYI2T';
-const CLIENT_SECRET = '$2a$04$9nejwz1DKzR1C.cOI6nAh.';
+// 비밀값은 코드에 쓰지 않고 Render의 Environment 메뉴에서 불러옵니다.
+const CLIENT_ID = process.env.NAVER_CLIENT_ID;
+const CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
+const APP_PASSWORD = process.env.APP_PASSWORD;
+
+if (!CLIENT_ID || !CLIENT_SECRET || !APP_PASSWORD) {
+  console.error('⚠ 환경변수(NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, APP_PASSWORD)가 설정되지 않았습니다.');
+}
+
+// 외부에 보여줘도 되는 파일만 목록으로 허용합니다. (server.js 등은 절대 노출되지 않음)
+const PUBLIC_FILES = {
+  '/index.html': 'text/html; charset=utf-8',
+  '/manifest.json': 'application/json; charset=utf-8',
+  '/sw.js': 'application/javascript; charset=utf-8',
+  '/icon-192.png': 'image/png'
+};
+
+function sendJson(res, status, obj) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
+}
+
+function isPasswordOk(req) {
+  if (!APP_PASSWORD) return false;
+  const given = Buffer.from(String(req.headers['x-app-password'] || ''));
+  const expected = Buffer.from(APP_PASSWORD);
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+}
 
 async function getNaverToken() {
   const timestamp = Date.now();
@@ -26,7 +53,7 @@ async function getNaverToken() {
   });
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(JSON.stringify(data));
+    throw new Error(`네이버 인증 실패 (${res.status}): ${data.message || data.code || ''}`);
   }
   return data.access_token;
 }
@@ -39,86 +66,65 @@ async function fetchOrdersForMonth(token, year, month) {
 
   const dailyUrl = `https://api.commerce.naver.com/external/v1/pay-settle/settle/daily?startDate=${startDate}&endDate=${endDate}&size=1000`;
 
-  let items = [];
-  try {
-    const res = await fetch(dailyUrl, {
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-    });
-    const data = await res.json();
-    if (data && data.elements && Array.isArray(data.elements)) {
-      items = data.elements;
-    }
-  } catch (err) {
-    console.error('조회 오류:', err.message);
+  const res = await fetch(dailyUrl, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`정산 조회 실패 (${res.status}): ${data.message || data.code || ''}`);
   }
-  return items;
+  return Array.isArray(data.elements) ? data.elements : [];
 }
 
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.png': 'image/png'
-};
-
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const reqUrl = new URL(req.url, 'http://localhost');
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  const reqUrl = new URL(req.url, `http://${req.headers.host}`);
-
-  // 1. 서버 IP 확인용 주소
-  if (reqUrl.pathname === '/api/check-ip') {
-    try {
-      const ipRes = await fetch('https://api.ipify.org?format=json');
-      const ipData = await ipRes.json();
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify(ipData));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
-  }
-
-  // 2. 네이버 동기화 API
+  // 1. 네이버 정산 동기화 API (비밀번호 필요)
   if (reqUrl.pathname === '/api/naver-orders-month') {
-    const year = parseInt(reqUrl.searchParams.get('year') || '2026', 10);
-    const month = parseInt(reqUrl.searchParams.get('month') || '9', 10);
+    if (!isPasswordOk(req)) {
+      sendJson(res, 401, { error: '비밀번호가 맞지 않습니다.' });
+      return;
+    }
+
+    const now = new Date();
+    const year = parseInt(reqUrl.searchParams.get('year') || now.getFullYear(), 10);
+    const month = parseInt(reqUrl.searchParams.get('month') || now.getMonth() + 1, 10);
+    if (!(year >= 2020 && year <= 2100 && month >= 1 && month <= 12)) {
+      sendJson(res, 400, { error: '연도/월 값이 올바르지 않습니다.' });
+      return;
+    }
 
     try {
       const token = await getNaverToken();
       const orders = await fetchOrdersForMonth(token, year, month);
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ elements: orders }));
+      sendJson(res, 200, { elements: orders });
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: err.message }));
+      console.error('네이버 동기화 오류:', err.message);
+      sendJson(res, 500, { error: err.message });
     }
     return;
   }
 
-  // 3. 웹 화면 서빙
-  let filePath = reqUrl.pathname === '/' ? '/index.html' : reqUrl.pathname;
-  const fullPath = path.join(__dirname, filePath);
-  const ext = path.extname(fullPath).toLowerCase();
+  // 2. 웹 화면 서빙 (허용 목록에 있는 파일만)
+  const filePath = reqUrl.pathname === '/' ? '/index.html' : reqUrl.pathname;
+  const contentType = PUBLIC_FILES[filePath];
+  if (!contentType) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('404 Not Found');
+    return;
+  }
 
-  fs.readFile(fullPath, (err, content) => {
+  fs.readFile(path.join(__dirname, filePath), (err, content) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('404 Not Found');
-    } else {
-      res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
-      res.end(content);
+      return;
     }
+    const headers = { 'Content-Type': contentType };
+    // 화면과 서비스워커는 항상 최신 버전을 받도록 캐시하지 않음
+    if (filePath === '/index.html' || filePath === '/sw.js') headers['Cache-Control'] = 'no-cache';
+    res.writeHead(200, headers);
+    res.end(content);
   });
 });
 
