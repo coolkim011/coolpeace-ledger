@@ -329,7 +329,7 @@
 
       <div class="ct-help">
         <b>캘린더에 이렇게 적어 주세요</b><br>
-        일정 제목에 <code>도급 김팀장 7만원</code> 처럼 <b>팀장님 몫(70%)</b>을 적으세요.<br>
+        제목에 <b>팀장</b>이 들어간 일정만 도급으로 봐요. <code>김팀장님 7만원</code> 처럼 <b>팀장님 몫(70%)</b>을 적으세요.<br>
         → 작업 매출 10만원, 팀장님 도급비 7만원, 원천세 2,310원, 실제 이체 67,690원으로 자동 계산돼요.<br>
         카드·현금영수증 등은 매출과 똑같이 제목에 적으면 부가세도 계산돼요.
       </div>
@@ -827,7 +827,8 @@
   const CONTRACTOR_SHARE = 0.7;
 
   function isContractorTitle(title) {
-    return title.includes('도급') || (title.includes('팀장') && !title.includes('매출'));
+    // 제목에 '팀장'이 들어간 일정만 도급으로 봄
+    return title.includes('팀장');
   }
 
   function parseContractorEntry(event, title, total) {
@@ -835,13 +836,9 @@
     const dateStr = startObj.substring(0, 10).replace(/-/g, '.');
 
     // 팀장 이름: "김팀장", "김 팀장", "김철수팀장" → "김팀장" 형태로 통일
-    let name = '이름 미확인';
+    let name = '팀장님';
     const nm = title.match(/([가-힣]{1,4})\s*팀장/);
-    if (nm) name = `${nm[1]}팀장`;
-    else {
-      const after = title.match(/도급\s*([가-힣]{2,4})/);
-      if (after) name = after[1];
-    }
+    if (nm && !['매출', '도급', '지출'].includes(nm[1])) name = `${nm[1]}팀장`;
 
     // 적힌 금액 = 팀장님 몫(세전 지급액)
     const gross = Math.max(0, total);
