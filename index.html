@@ -44,6 +44,8 @@
     .btn-export { background: #27ae60; color: #fff; box-shadow: 0 2px 6px rgba(39, 174, 96, 0.2); }
     .btn-naver { background: #03c75a; color: #fff; box-shadow: 0 2px 6px rgba(3, 199, 90, 0.2); }
     .btn-naver:disabled { background: #a4b0be; cursor: not-allowed; }
+    .btn-naver-year { grid-column: 1 / -1; background: #fff; color: #03a94d; border: 1.5px solid #03c75a; }
+    .btn-naver-year:disabled { color: #a4b0be; border-color: #a4b0be; cursor: not-allowed; }
 
     .summary-card { background: #192a56; color: #fff; border-radius: 18px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(25, 42, 86, 0.2); }
     .summary-title { font-size: 13px; color: #a4b0be; }
@@ -143,6 +145,9 @@
         <button class="btn-action btn-naver" id="btnSyncNaver" onclick="syncCurrentMonthNaver()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M16.273 12.845L7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z"/></svg>
           <span id="btnSyncText">9월 스마트스토어 동기화</span>
+        </button>
+        <button class="btn-action btn-naver-year" id="btnSyncYear" onclick="syncWholeYearNaver()">
+          <span id="btnSyncYearText">올해 스마트스토어 전체 동기화</span>
         </button>
       </div>
 
@@ -404,6 +409,10 @@
     if (btnText) {
       btnText.innerText = `${month}월 스마트스토어 동기화`;
     }
+    const yearText = document.getElementById('btnSyncYearText');
+    if (yearText) {
+      yearText.innerText = `${year}년 스마트스토어 전체 동기화`;
+    }
   }
 
   function setFilter(type, el) {
@@ -413,117 +422,150 @@
     renderDashboard();
   }
 
-  // ★ 상대 경로(/api/naver-orders-month)로 변경되어 PC와 배포 환경 모두 호환
+  // ── 스마트스토어 동기화 ──────────────────────────────
+
+  // 비밀번호를 붙여서 서버에 요청 (틀리면 한 번 다시 물어봄)
+  async function requestNaverMonth(year, month) {
+    const apiUrl = `/api/naver-orders-month?year=${year}&month=${month}`;
+    let appPw = localStorage.getItem('app_password') || '';
+    if (!appPw) {
+      appPw = prompt('장부 비밀번호를 입력하세요') || '';
+      if (!appPw) throw new Error('비밀번호를 입력해야 동기화할 수 있습니다.');
+    }
+
+    let res = await fetch(apiUrl, { headers: { 'x-app-password': appPw } });
+    if (res.status === 401) {
+      localStorage.removeItem('app_password');
+      appPw = prompt('비밀번호가 맞지 않습니다. 다시 입력하세요') || '';
+      if (!appPw) throw new Error('비밀번호를 입력해야 동기화할 수 있습니다.');
+      res = await fetch(apiUrl, { headers: { 'x-app-password': appPw } });
+      if (res.status === 401) throw new Error('비밀번호가 맞지 않습니다.');
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || '서버 통신 실패 (서버 가동 여부를 확인해 주세요)');
+    }
+    localStorage.setItem('app_password', appPw);
+    const data = await res.json();
+    return (data && data.elements) ? data.elements : [];
+  }
+
+  // 네이버 정산 내역 한 달치를 장부 항목으로 바꿔서 반영
+  function applyNaverMonth(targetYear, targetMonth, orderList) {
+    const targetPrefix = `${targetYear}.${String(targetMonth).padStart(2, '0')}`;
+    naverEvents = naverEvents.filter(item => !item.date.startsWith(targetPrefix));
+
+    orderList.forEach((item) => {
+      const rawDate = item.settleCompletedDate || item.settleBasisStartDate || '';
+      if (!rawDate) return;
+
+      const dateStr = rawDate.substring(0, 10).replace(/-/g, '.');
+      const payAmount = item.paySettleAmount || (item.settleAmount + Math.abs(item.commissionSettleAmount || 0));
+      const commAmount = Math.abs(item.commissionSettleAmount || 0);
+      const actualDeposit = item.settleAmount || 0;
+      const itemYear = parseInt(dateStr.split('.')[0], 10);
+      const itemMonth = parseInt(dateStr.split('.')[1], 10);
+
+      if (payAmount > 0) {
+        const supply = Math.round(payAmount / 1.1);
+        naverEvents.push({
+          type: 'REV', isTaxReportable: true, taxProofType: '온라인매출',
+          rawDate: dateStr, date: dateStr, year: itemYear, month: itemMonth,
+          item: `스마트스토어 정산매출 (${dateStr})`,
+          price: payAmount, supply: supply, vat: payAmount - supply,
+          method: '스마트스토어', badgeClass: 'badge-naver',
+          target: '네이버페이(국민사업자)', name: '네이버페이 입금건', phone: '',
+          address: '네이버 스마트스토어 온라인 정산',
+          memo: `정산완료일: ${dateStr}\n통장 실입금액: ${actualDeposit.toLocaleString()}원\n차감 수수료: ${commAmount.toLocaleString()}원`
+        });
+      }
+
+      if (commAmount > 0) {
+        const supply = Math.round(commAmount / 1.1);
+        naverEvents.push({
+          type: 'EXP', isTaxReportable: true, taxProofType: '세금계산서',
+          rawDate: dateStr, date: dateStr, year: itemYear, month: itemMonth,
+          item: '스마트스토어 판매수수료 공제',
+          price: commAmount, supply: supply, vat: commAmount - supply,
+          method: '카드지출', badgeClass: 'badge-expense',
+          target: '네이버 정산차감', name: '네이버파이낸셜(주)', phone: '',
+          address: '네이버파이낸셜',
+          memo: `매출 ${payAmount.toLocaleString()}원에 대한 수수료 차감`
+        });
+      }
+    });
+
+    localStorage.setItem('naver_granular_orders', JSON.stringify(naverEvents));
+  }
+
+  function setSyncButtonsDisabled(disabled) {
+    ['btnSyncNaver', 'btnSyncYear'].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = disabled;
+    });
+  }
+
+  // 보고 있는 달만 동기화
   async function syncCurrentMonthNaver() {
     const targetYear = viewDate.getFullYear();
     const targetMonth = viewDate.getMonth() + 1;
-    const btn = document.getElementById('btnSyncNaver');
     const btnText = document.getElementById('btnSyncText');
 
-    if (btn) {
-      btn.disabled = true;
-      if (btnText) btnText.innerText = `${targetMonth}월 데이터 수집 중...`;
-    }
+    setSyncButtonsDisabled(true);
+    if (btnText) btnText.innerText = `${targetMonth}월 데이터 수집 중...`;
 
     try {
-      const apiUrl = `/api/naver-orders-month?year=${targetYear}&month=${targetMonth}`;
-      let appPw = localStorage.getItem('app_password') || '';
-      if (!appPw) {
-        appPw = prompt('장부 비밀번호를 입력하세요') || '';
-        if (!appPw) throw new Error('비밀번호를 입력해야 동기화할 수 있습니다.');
-      }
-
-      let res = await fetch(apiUrl, { headers: { 'x-app-password': appPw } });
-      if (res.status === 401) {
-        localStorage.removeItem('app_password');
-        appPw = prompt('비밀번호가 맞지 않습니다. 다시 입력하세요') || '';
-        if (!appPw) throw new Error('비밀번호를 입력해야 동기화할 수 있습니다.');
-        res = await fetch(apiUrl, { headers: { 'x-app-password': appPw } });
-        if (res.status === 401) throw new Error('비밀번호가 맞지 않습니다.');
-      }
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || '서버 통신 실패 (서버 가동 여부를 확인해 주세요)');
-      }
-      localStorage.setItem('app_password', appPw);
-      
-      const data = await res.json();
-      const orderList = (data && data.elements) ? data.elements : [];
-
-      const targetPrefix = `${targetYear}.${String(targetMonth).padStart(2, '0')}`;
-      naverEvents = naverEvents.filter(item => !item.date.startsWith(targetPrefix));
-
-      orderList.forEach((item) => {
-        const rawDate = item.settleCompletedDate || item.settleBasisStartDate || '';
-        if (!rawDate) return;
-
-        const dateStr = rawDate.substring(0, 10).replace(/-/g, '.');
-        const payAmount = item.paySettleAmount || (item.settleAmount + Math.abs(item.commissionSettleAmount || 0));
-        const commAmount = Math.abs(item.commissionSettleAmount || 0);
-        const actualDeposit = item.settleAmount || 0;
-
-        if (payAmount > 0) {
-          const supply = Math.round(payAmount / 1.1);
-          const vat = payAmount - supply;
-          naverEvents.push({
-            type: 'REV',
-            isTaxReportable: true,
-            taxProofType: '온라인매출',
-            rawDate: dateStr,
-            date: dateStr,
-            year: targetYear,
-            month: targetMonth,
-            item: `스마트스토어 정산매출 (${dateStr})`,
-            price: payAmount,
-            supply: supply,
-            vat: vat,
-            method: '스마트스토어',
-            badgeClass: 'badge-naver',
-            target: '네이버페이(국민사업자)',
-            name: `네이버페이 입금건`,
-            phone: '',
-            address: '네이버 스마트스토어 온라인 정산',
-            memo: `정산완료일: ${dateStr}\n통장 실입금액: ${actualDeposit.toLocaleString()}원\n차감 수수료: ${commAmount.toLocaleString()}원`
-          });
-        }
-
-        if (commAmount > 0) {
-          const supply = Math.round(commAmount / 1.1);
-          const vat = commAmount - supply;
-          naverEvents.push({
-            type: 'EXP',
-            isTaxReportable: true,
-            taxProofType: '세금계산서',
-            rawDate: dateStr,
-            date: dateStr,
-            year: targetYear,
-            month: targetMonth,
-            item: `스마트스토어 판매수수료 공제`,
-            price: commAmount,
-            supply: supply,
-            vat: vat,
-            method: '카드지출',
-            badgeClass: 'badge-expense',
-            target: '네이버 정산차감',
-            name: '네이버파이낸셜(주)',
-            phone: '',
-            address: '네이버파이낸셜',
-            memo: `매출 ${payAmount.toLocaleString()}원에 대한 수수료 차감`
-          });
-        }
-      });
-
-      localStorage.setItem('naver_granular_orders', JSON.stringify(naverEvents));
+      const orderList = await requestNaverMonth(targetYear, targetMonth);
+      applyNaverMonth(targetYear, targetMonth, orderList);
       renderDashboard();
       alert(`✔ ${targetYear}년 ${targetMonth}월 정산 내역이 성공적으로 반영되었습니다!`);
-
     } catch (err) {
       alert(`동기화 실패: ${err.message}`);
     } finally {
-      if (btn) {
-        btn.disabled = false;
-        if (btnText) btnText.innerText = `${targetMonth}월 스마트스토어 동기화`;
+      setSyncButtonsDisabled(false);
+      updateMonthLabel();
+    }
+  }
+
+  // 보고 있는 해의 1월부터 (올해면 이번 달까지, 지난해면 12월까지) 한 번에 동기화
+  async function syncWholeYearNaver() {
+    const targetYear = viewDate.getFullYear();
+    const now = new Date();
+    if (targetYear > now.getFullYear()) {
+      alert('아직 오지 않은 해는 동기화할 수 없습니다.');
+      return;
+    }
+    const lastMonth = targetYear === now.getFullYear() ? now.getMonth() + 1 : 12;
+    const yearText = document.getElementById('btnSyncYearText');
+
+    setSyncButtonsDisabled(true);
+    let done = 0;
+    const failed = [];
+
+    try {
+      for (let m = 1; m <= lastMonth; m++) {
+        if (yearText) yearText.innerText = `${targetYear}년 ${m}월 수집 중... (${m}/${lastMonth})`;
+        try {
+          const orderList = await requestNaverMonth(targetYear, m);
+          applyNaverMonth(targetYear, m, orderList);
+          done++;
+        } catch (err) {
+          if (err.message.includes('비밀번호')) throw err;  // 비밀번호 문제면 바로 중단
+          failed.push(`${m}월`);
+        }
+        await new Promise(r => setTimeout(r, 400));  // 네이버 서버 부담을 줄이기 위해 잠깐 쉼
       }
+      renderDashboard();
+      if (failed.length === 0) {
+        alert(`✔ ${targetYear}년 1~${lastMonth}월 정산 내역이 모두 반영되었습니다!`);
+      } else {
+        alert(`${done}개월 반영 완료. 실패한 달: ${failed.join(', ')}\n해당 달로 이동해서 월별 동기화를 다시 눌러 주세요.`);
+      }
+    } catch (err) {
+      alert(`동기화 실패: ${err.message}`);
+    } finally {
+      setSyncButtonsDisabled(false);
+      updateMonthLabel();
     }
   }
 

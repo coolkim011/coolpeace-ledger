@@ -33,7 +33,13 @@ function isPasswordOk(req) {
   return given.length === expected.length && crypto.timingSafeEqual(given, expected);
 }
 
+// 네이버 인증 토큰을 잠시 보관해서, 여러 달을 연속 조회할 때 매번 새로 받지 않도록 함
+let cachedToken = null;
+let cachedTokenExp = 0;
+
 async function getNaverToken() {
+  if (cachedToken && Date.now() < cachedTokenExp) return cachedToken;
+
   const timestamp = Date.now();
   const password = `${CLIENT_ID}_${timestamp}`;
   const hashed = bcrypt.hashSync(password, CLIENT_SECRET);
@@ -55,7 +61,11 @@ async function getNaverToken() {
   if (!res.ok) {
     throw new Error(`네이버 인증 실패 (${res.status}): ${data.message || data.code || ''}`);
   }
-  return data.access_token;
+  cachedToken = data.access_token;
+  // 만료 10분 전에 새로 받도록 여유를 둠 (정보가 없으면 30분)
+  const lifeSec = Number(data.expires_in) > 900 ? Number(data.expires_in) - 600 : 1800;
+  cachedTokenExp = Date.now() + lifeSec * 1000;
+  return cachedToken;
 }
 
 async function fetchOrdersForMonth(token, year, month) {
@@ -71,6 +81,7 @@ async function fetchOrdersForMonth(token, year, month) {
   });
   const data = await res.json();
   if (!res.ok) {
+    if (res.status === 401) { cachedToken = null; cachedTokenExp = 0; }
     throw new Error(`정산 조회 실패 (${res.status}): ${data.message || data.code || ''}`);
   }
   return Array.isArray(data.elements) ? data.elements : [];
