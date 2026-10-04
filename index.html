@@ -329,9 +329,9 @@
 
       <div class="ct-help">
         <b>캘린더에 이렇게 적어 주세요</b><br>
-        제목에 <b>팀장</b>이 들어간 일정만 도급으로 봐요. <code>김팀장님 7만원</code> 처럼 <b>팀장님 몫(70%)</b>을 적으세요.<br>
-        → 작업 매출 10만원, 팀장님 도급비 7만원, 원천세 2,310원, 실제 이체 67,690원으로 자동 계산돼요.<br>
-        카드·현금영수증 등은 매출과 똑같이 제목에 적으면 부가세도 계산돼요.
+        제목에 <b>팀장</b>이 들어간 일정만 도급으로 봐요. <b>고객에게 받은 금액</b>을 적으세요.<br>
+        <code>김팀장님 카드 10만원</code> → 부가세 뺀 90,909원의 70% = 팀장님 몫 63,636원, 이체 61,546원<br>
+        <code>김팀장님 10만원</code> (무증빙 현금) → 10만원의 70% = 팀장님 몫 70,000원, 이체 67,690원
       </div>
     </div>
 
@@ -693,13 +693,10 @@
     else if (manMatch) total = Math.round(parseFloat(manMatch[1]) * 10000);
     else if (wonMatch) total = parseInt(wonMatch[1], 10);
 
-    // 도급 일정: 적힌 금액 = 팀장님 몫(작업금액의 70%)
-    //  → 작업 매출(100%)과 팀장님 도급비(70%, 원천세 3.3%)를 함께 장부에 올림
-    let contractorEntry = null;
+    // 팀장 일정: 적힌 금액 = 고객에게 받은 작업 금액
+    //  → 작업 매출로 올리고, 팀장님 도급비(부가세 뺀 금액의 70%)는 아래에서 따로 만듦
     if (isContractor) {
-      contractorEntry = parseContractorEntry(event, title, total);
-      if (total <= 0) return contractorEntry;
-      total = Math.round(total / CONTRACTOR_SHARE);
+      if (total <= 0) return parseContractorEntry(event, title, 0, 0, 0);
       isExpense = false;
     }
 
@@ -782,7 +779,6 @@
     }
 
     let item = isExpense ? '경비 항목' : '홈케어 청소';
-    if (contractorEntry) item = `도급 작업 (${contractorEntry.name})`;
     const itemMatch = title.match(/(드럼세탁기|통돌이세탁기|세탁기|에어컨|벽걸이|스탠드|시스템|원형\d+대|\d+대)/);
     if (itemMatch) {
       item = itemMatch[1].trim();
@@ -811,7 +807,14 @@
       address: address,
       memo: title
     };
-    return contractorEntry ? [entry, contractorEntry] : entry;
+    if (isContractor) {
+      // 부가세가 있는 매출은 공급가액 기준, 무증빙 현금은 받은 금액 기준으로 70%
+      const share = Math.round(entry.supply * CONTRACTOR_SHARE);
+      const ct = parseContractorEntry(event, title, share, total, entry.supply);
+      entry.item = `팀장 작업 (${ct.name})`;
+      return [entry, ct];
+    }
+    return entry;
   }
 
   // ── 도급 팀장 지급 (사업소득 3.3% 원천징수) ──────────────────
@@ -831,7 +834,7 @@
     return title.includes('팀장');
   }
 
-  function parseContractorEntry(event, title, total) {
+  function parseContractorEntry(event, title, share, jobTotal, jobSupply) {
     const startObj = event.start.dateTime || event.start.date;
     const dateStr = startObj.substring(0, 10).replace(/-/g, '.');
 
@@ -840,11 +843,10 @@
     const nm = title.match(/([가-힣]{1,4})\s*팀장/);
     if (nm && !['매출', '도급', '지출'].includes(nm[1])) name = `${nm[1]}팀장`;
 
-    // 적힌 금액 = 팀장님 몫(세전 지급액)
-    const gross = Math.max(0, total);
+    const gross = Math.max(0, share);
     const w = calcWithholding(gross);
-    const needsCheck = total <= 0;
-    const jobTotal = Math.round(gross / CONTRACTOR_SHARE);
+    const needsCheck = gross <= 0;
+    const vatPart = jobTotal - jobSupply;
 
     return {
       type: 'EXP',
@@ -863,7 +865,7 @@
       gross: gross,
       incomeTax: w.incomeTax,
       localTax: w.localTax,
-      netPaid: total > 0 ? w.net : 0,
+      netPaid: gross > 0 ? w.net : 0,
       method: '도급(3.3%)',
       badgeClass: 'badge-contract',
       target: '계좌이체',
@@ -871,7 +873,9 @@
       phone: '',
       address: '-',
       jobTotal: jobTotal,
-      memo: `${title}\n\n작업 금액(매출): ${jobTotal.toLocaleString()}원\n수수료(30%): ${(jobTotal - gross).toLocaleString()}원\n팀장님 몫(70%, 세전): ${gross.toLocaleString()}원\n소득세(3%): ${w.incomeTax.toLocaleString()}원\n지방소득세(0.3%): ${w.localTax.toLocaleString()}원\n실제 이체액: ${w.net.toLocaleString()}원` +
+      memo: `${title}\n\n작업 금액(고객 결제): ${jobTotal.toLocaleString()}원\n` +
+            (vatPart > 0 ? `부가세 제외: -${vatPart.toLocaleString()}원 → 공급가액 ${jobSupply.toLocaleString()}원\n` : '부가세 없음 (무증빙)\n') +
+            `팀장님 몫(70%, 세전): ${gross.toLocaleString()}원\n킴님 몫(30%): ${(jobSupply - gross).toLocaleString()}원\n소득세(3%): ${w.incomeTax.toLocaleString()}원\n지방소득세(0.3%): ${w.localTax.toLocaleString()}원\n실제 이체액: ${w.net.toLocaleString()}원` +
             (needsCheck ? '\n\n⚠ 금액을 정확히 계산하지 못했습니다. 캘린더 제목의 금액을 확인해 주세요.' : '')
     };
   }
@@ -950,7 +954,7 @@
           <span class="card-title" style="margin:0">${escapeHtml(it.name)}</span>
           <span class="card-price price-exp">${it.netPaid.toLocaleString()}원 이체</span>
         </div>
-        <div class="card-sub">작업 ${it.jobTotal.toLocaleString()}원 → 몫 ${it.gross.toLocaleString()}원 · 원천세 ${(it.incomeTax + it.localTax).toLocaleString()}원 (소득세 ${it.incomeTax.toLocaleString()} + 지방 ${it.localTax.toLocaleString()})</div>`;
+        <div class="card-sub">작업 ${it.jobTotal.toLocaleString()}원 → 팀장님 몫 ${it.gross.toLocaleString()}원 · 원천세 ${(it.incomeTax + it.localTax).toLocaleString()}원 (소득세 ${it.incomeTax.toLocaleString()} + 지방 ${it.localTax.toLocaleString()})</div>`;
       listEl.appendChild(card);
     });
   }
