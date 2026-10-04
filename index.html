@@ -530,15 +530,24 @@
   async function fetchCalendarEvents(accessToken) {
     document.getElementById('loading').style.display = 'block';
     
-    const timeMin = new Date('2024-01-01T00:00:00Z').toISOString();
-    const timeMax = new Date('2027-12-31T23:59:59Z').toISOString();
-
-    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=2500`;
+    // 2024년 1월부터 '내년 말'까지 자동으로 읽음 (연도가 바뀌어도 수정 불필요)
+    const timeMin = new Date('2024-01-01T00:00:00+09:00').toISOString();
+    const timeMax = new Date(`${new Date().getFullYear() + 1}-12-31T23:59:59+09:00`).toISOString();
+    const baseUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=2500`;
 
     try {
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
+      // 일정이 2,500개를 넘어도 빠짐없이 모두 가져오도록 페이지를 넘겨가며 읽음
+      const events = [];
+      let pageToken = '';
+      let response;
+      do {
+        const url = pageToken ? `${baseUrl}&pageToken=${encodeURIComponent(pageToken)}` : baseUrl;
+        response = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        if (!response.ok) break;
+        const page = await response.json();
+        events.push(...(page.items || []));
+        pageToken = page.nextPageToken || '';
+      } while (pageToken);
 
       if (response.status === 401) {
         localStorage.removeItem('g_token');
@@ -549,9 +558,8 @@
         return;
       }
 
-      const data = await response.json();
-      const events = data.items || [];
-      
+      if (!response.ok) throw new Error(`캘린더 응답 오류 (${response.status})`);
+
       allEvents = [];
       events.forEach(evt => {
         const parsed = parseEventToEntry(evt);
