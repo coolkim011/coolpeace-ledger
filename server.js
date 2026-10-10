@@ -133,7 +133,11 @@ async function getNaverToken() {
   const data = await res.json();
   if (!res.ok) {
     const code = data.code || '';
-    if (String(code).includes('IP_NOT_ALLOWED')) throw new Error('네이버가 서버 IP를 막았습니다 (IP_NOT_ALLOWED). 커머스API센터의 IP 등록을 확인하세요.');
+    if (String(code).includes('IP_NOT_ALLOWED')) {
+      throw new Error(PROXY_URL
+        ? '네이버가 서버 IP를 막았습니다. [고정 IP 사용 중] → 커머스API센터에 Fixie IP 2개가 등록·저장됐는지 확인하세요.'
+        : '네이버가 서버 IP를 막았습니다. [고정 IP 미사용] → Render Environment에 FIXIE_URL이 없습니다.');
+    }
     throw new Error(`네이버 인증 실패 (${res.status}): ${data.message || code}`);
   }
   cachedToken = data.access_token;
